@@ -64,10 +64,11 @@ def test(ROI_data, input_data):
     for ROI_num in np.unique(ROI_data)[1:]:
         model = '/home/rschadmin/Data/svr_test/model_run'+str(ROI_num)+'+orig.BRIK'
         prediction = '/home/rschadmin/Data/svr_prediction/predict2with1_run'+str(ROI_num)
+        real_model = '/home/rschadmin/Data/svr_test2/timeseries'+str(ROI_num)+'.1D'
         testing = afni.SVMTest()
         testing.inputs.in_file= input_data
         testing.inputs.model= model
-        #testing.inputs.testlabels= real_model
+        testing.inputs.testlabels= real_model
         testing.inputs.out_file= prediction
         test_res = testing.run()
         
