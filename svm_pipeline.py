@@ -3,7 +3,7 @@ import nibabel as nb
 import numpy as np
 import os
 
-dataset = 'svr_test2'
+dataset = 'svr_test'
 
 #inputs
 input_data = '/home/rschadmin/Data/'+dataset+'/bandpassed_demeaned_filtered_wtsimt.nii.gz'
@@ -62,9 +62,9 @@ def train(input_data, ROI_data, total_mask, ROIs):
 
 def test(ROI_data, input_data):
     for ROI_num in np.unique(ROI_data)[1:]:
-        model = '/home/rschadmin/Data/svr_test/model_run'+str(ROI_num)+'+orig.BRIK'
-        prediction = '/home/rschadmin/Data/svr_prediction/predict2with1_run'+str(ROI_num)
-        real_model = '/home/rschadmin/Data/svr_test2/timeseries'+str(ROI_num)+'.1D'
+        model = '/home/rschadmin/Data/svr_test2/model_run'+str(ROI_num)+'+orig.BRIK'
+        prediction = '/home/rschadmin/Data/svr_prediction/predict1with2_run'+str(ROI_num)
+        real_model = '/home/rschadmin/Data/svr_test/timeseries'+str(ROI_num)+'.1D'
         testing = afni.SVMTest()
         testing.inputs.in_file= input_data
         testing.inputs.model= model
@@ -72,5 +72,21 @@ def test(ROI_data, input_data):
         testing.inputs.out_file= prediction
         test_res = testing.run()
         
+def conc(x,y,rho):
+    # equation  
+    conc = (2*rho*x.std(axis=-1)*y.std(axis=-1))/(x.var(axis=-1)+y.var(axis=-1)+(x.mean(axis=-1)-y.mean(axis=-1))**2)      
+
 def stats():
-    print 1
+    ##Accuracy
+    with open('/home/rschadmin/Data/svr_prediction/predict1with2_run1'+str(ROI_num)+'.1D') as f:
+        prediction1 = np.fromfile(f, sep=" ")
+    with open('/home/rschadmin/Data/svr_test/timeseries'+str(ROI_num)+'.1D') as f:
+        timeseries1 = np.fromfile(f, sep=" ")
+    accuracy = conc(prediction1, timeseries1, np.corrcoef(x,y)[0,1])
+    
+    ##Reproducibility
+    #load numpy files
+    model1_run1 = nb.load('')
+    model2_run1 = nb.load('')
+    reproducibility = conc(model1_run1, model2_run1, rho)
+    
