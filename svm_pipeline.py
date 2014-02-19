@@ -2,6 +2,7 @@ import nipype.interfaces.afni as afni
 import nibabel as nb
 import numpy as np
 import os
+from scipy.stats import nanmean, pearsonr
 
 dataset = 'svr_test'
 
@@ -23,11 +24,8 @@ def train(input_data, ROI_data, total_mask, ROIs):
         alphas = '/home/rschadmin/Data/'+dataset+'/alphas_run'+str(ROI_num)
 
         #make mask for not(ROI)
-        #3dcalc -a '/home/rschadmin/Data/ROIs/craddock_2011_parcellations/rois200.nii' -expr 'not(equals(a,1))' -byte -prefix mask
         #if not os.path.exists(mask):
-        dilation_str = '-c a+i -d a-i -e a+j -f a-j -g a+k -h a-k' 
-        #dilates ROI volume in three directions
-        
+        dilation_str = '-c a+i -d a-i -e a+j -f a-j -g a+k -h a-k' #dilates ROI volume in three directions
         masking = afni.Calc()
         masking.inputs.in_file_a = ROIs
         masking.inputs.in_file_b = total_mask
@@ -59,6 +57,12 @@ def train(input_data, ROI_data, total_mask, ROIs):
         training.inputs.options = '-c 100 -e 0.01 -overwrite'
         training.inputs.max_iterations = 100
         train_res = training.run()
+        
+        #convert models to nifti
+        convert = afni.AFNItoNIFTI()
+        convert.inputs.in_file = model+'+orig.BRIK'
+        convert.inputs.out_file = model+'.nii'
+        convert_res = convert.run()
 
 def test(ROI_data, input_data):
     for ROI_num in np.unique(ROI_data)[1:]:
@@ -72,21 +76,67 @@ def test(ROI_data, input_data):
         testing.inputs.out_file= prediction
         test_res = testing.run()
         
-def conc(x,y,rho):
-    # equation  
-    conc = (2*rho*x.std(axis=-1)*y.std(axis=-1))/(x.var(axis=-1)+y.var(axis=-1)+(x.mean(axis=-1)-y.mean(axis=-1))**2)      
+def conc(x,y,r):
+    denominator = x.var(axis=-1)+y.var(axis=-1)+(x.mean(axis=-1)-y.mean(axis=-1))**2
+    #mask = np.not_equal(denominator,0)
+    #conc = np.choose(mask,(1,(2*rho*x.std(axis=-1)*y.std(axis=-1))/denominator))
+    conc = 2.*r*x.std(axis=-1)*y.std(axis=-1)/denominator
+    return conc
 
-def stats():
+def rho3D(x,y):
+    #truncate x or y to fit same shape
+    if x.shape<y.shape:
+        y = y[:,:,:,:x.shape[3]]
+    else:
+        x = x[:,:,:,:y.shape[3]]
+    #rho = pearsonr(x.flatten(),y.flatten())[0]
+    meanx = x.mean(axis=-1)
+    meany = y.mean(axis=-1)
+    errx = x-meanx[:,:,:,np.newaxis]
+    erry = y-meany[:,:,:,np.newaxis]
+    cov = errx*erry
+    covariance = cov.sum(axis=3)
+    stdx = x.std(axis=-1)
+    stdy = y.std(axis=-1)
+    rho = np.choose(mask,(1,(covariance/(stdx*stdy))))
+    rho = covariance/(stdx*stdy)
+    return rho
+    
+# /home/data/Projects/CPAC_Regression_Test/2013-12-05_v-0-3-3/group-correlations_script.py
+    
+def accuracy(prediction_file, timeseries_file):
     ##Accuracy
-    with open('/home/rschadmin/Data/svr_prediction/predict1with2_run1'+str(ROI_num)+'.1D') as f:
-        prediction1 = np.fromfile(f, sep=" ")
-    with open('/home/rschadmin/Data/svr_test/timeseries'+str(ROI_num)+'.1D') as f:
-        timeseries1 = np.fromfile(f, sep=" ")
-    accuracy = conc(prediction1, timeseries1, np.corrcoef(x,y)[0,1])
+    with open(prediction_file) as f:
+        prediction = np.fromfile(f, sep=" ")
+    with open(timeseries_file) as f:
+        timeseries = np.fromfile(f, sep=" ")
+    accuracy = conc(prediction, timeseries, pearsonr(prediction,timeseries)[0])
+    return accuracy
     
-    ##Reproducibility
-    #load numpy files
-    model1_run1 = nb.load('')
-    model2_run1 = nb.load('')
-    reproducibility = conc(model1_run1, model2_run1, rho)
+def reproducibility(model1, model2):
+    rho = rho3D(model1, model2)
+    reproducibility = nanmean(nanmean(nanmean(conc(model1, model2, rho))))
+    return reproducibility
     
+def stats(ROI_data):
+    acc1w2 = []
+    acc2w1 = []
+    rep = []
+    for ROI_num in np.unique(ROI_data)[1:]:
+        print str(ROI_num)+' of '+str(np.unique(ROI_data).max())
+        ##Accuracy 1<-2
+        pred_file = '/home/rschadmin/Data/svr_prediction/predict1with2_run'+str(ROI_num)+'.1D'
+        TS_file = '/home/rschadmin/Data/svr_test/timeseries'+str(ROI_num)+'.1D'
+        acc1w2.append(accuracy(pred_file, TS_file))
+        ##Accuracy 1->2
+        pred_file = '/home/rschadmin/Data/svr_prediction/predict2with1_run'+str(ROI_num)+'.1D'
+        TS_file = '/home/rschadmin/Data/svr_test2/timeseries'+str(ROI_num)+'.1D'
+        acc2w1.append(accuracy(pred_file, TS_file))
+        ##Reproducibility
+        model1 = nb.load('/home/rschadmin/Data/svr_test/model_run'+str(ROI_num)+'.nii').get_data()
+        model2 = nb.load('/home/rschadmin/Data/svr_test2/model_run'+str(ROI_num)+'.nii').get_data()
+        rep.append(reproducibility(model1,model2))
+    np.save('/home/rschadmin/Data/svr_test/acc1w2',acc1w2)
+    np.save('/home/rschadmin/Data/svr_test/acc2w1',acc2w1)
+    np.save('/home/rschadmin/Data/svr_test/rep',rep)
+    return acc1w2, acc2w1, rep
