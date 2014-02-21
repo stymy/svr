@@ -1,11 +1,13 @@
+import nipype.pipeline.engine as pe
 import nipype.interfaces.afni as afni
 import nibabel as nb
 import numpy as np
 import os
 from scipy.stats import nanmean, pearsonr
 
-dataset = 'svr_test'
+from variables import subject_directory
 
+    
 #inputs
 input_data = '/home/rschadmin/Data/'+dataset+'/bandpassed_demeaned_filtered_wtsimt.nii.gz'
 ROIs = '/home/rschadmin/Data/svr_test/rois200_resampled.nii'
@@ -98,7 +100,6 @@ def rho3D(x,y):
     covariance = cov.sum(axis=3)
     stdx = x.std(axis=-1)
     stdy = y.std(axis=-1)
-    rho = np.choose(mask,(1,(covariance/(stdx*stdy))))
     rho = covariance/(stdx*stdy)
     return rho
     
@@ -115,7 +116,7 @@ def accuracy(prediction_file, timeseries_file):
     
 def reproducibility(model1, model2):
     rho = rho3D(model1, model2)
-    reproducibility = nanmean(nanmean(nanmean(conc(model1, model2, rho))))
+    reproducibility = conc(model1, model2, rho) #nanmean to get one value
     return reproducibility
     
 def stats(ROI_data):
@@ -136,7 +137,7 @@ def stats(ROI_data):
         model1 = nb.load('/home/rschadmin/Data/svr_test/model_run'+str(ROI_num)+'.nii').get_data()
         model2 = nb.load('/home/rschadmin/Data/svr_test2/model_run'+str(ROI_num)+'.nii').get_data()
         rep.append(reproducibility(model1,model2))
-    np.save('/home/rschadmin/Data/svr_test/acc1w2',acc1w2)
-    np.save('/home/rschadmin/Data/svr_test/acc2w1',acc2w1)
+    np.save('/home/rschadmin/Data/svr_stats/acc1w2',acc1w2)
+    np.save('/home/rschadmin/Data/svr_stats/acc2w1',acc2w1)
     np.save('/home/rschadmin/Data/svr_test/rep',rep)
     return acc1w2, acc2w1, rep
