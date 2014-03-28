@@ -1,70 +1,113 @@
 import nipype.pipeline.engine as pe
 import nipype.interfaces.afni as afni
+import nipype.pipeline.utils as util
+import nipype.interfaces.io as nio
 import nibabel as nb
 import numpy as np
 import os
 from scipy.stats import nanmean, pearsonr
 
-from variables import subject_directory
+from variables import subjects, sessions, preprocs, workingdir, preproc_directory, ROIs, ROI_file
 
+def get_wf():
+    wf = pe.Workflow(name="svr_workflow")
+    wf.base_dir = os.path.join(workingdir,"svm_pipeline")
+    wf.config['execution']['crashdump_dir'] = wf.base_dir + "/crash_files"
+
+    #INFOSOURCE ITERABLES
+    subject_id_infosource = pe.Node(util.IdentityInterface(fields=['subject_id']), name="subject_id_infosource")
+    subject_id_infosource.iterables = ('subject_id', subjects)
     
-#inputs
-input_data = '/home/rschadmin/Data/'+dataset+'/bandpassed_demeaned_filtered_wtsimt.nii.gz'
-ROIs = '/home/rschadmin/Data/svr_test/rois200_resampled.nii'
-total_mask = '/home/rschadmin/Data/'+dataset+'/automask+orig.BRIK'
+    session_id_infosource = pe.Node(util.IdentityInterface(fields=['session_id']), name="session_id_infosource")
+    session_id_infosource.iterables = ('session_id', sessions)
+    
+    preproc_id_infosource = pe.Node(util.IdentityInterface(fields=['preproc_id']), name="preproc_id_infosource")
+    preproc_id_infosource.iterables = ('preproc_id', preprocs)
+    
+    ROI_id_infosource = pe.Node(util.IdentityInterface(fields=['ROI_id']), name="ROI_id_infosource")
+    ROI_id_infosource.iterables = ('ROI_id', ROIs)
 
-#find ROI range
-ROI_data = nb.load(ROIs).get_data()
-def train(input_data, ROI_data, total_mask, ROIs):
-    #loop through each ROI
-    for ROI_num in np.unique(ROI_data)[1:]:
-        #set outputs
-        timeseries = '/home/rschadmin/Data/'+dataset+'/timeseries'+str(ROI_num)+'.1D'
-        mask = '/home/rschadmin/Data/'+dataset+'/mask'+str(ROI_num)+'+orig.BRIK'
-        model = '/home/rschadmin/Data/'+dataset+'/model_run'+str(ROI_num)
-        w = '/home/rschadmin/Data/'+dataset+'/w_run'+str(ROI_num)
-        alphas = '/home/rschadmin/Data/'+dataset+'/alphas_run'+str(ROI_num)
 
-        #make mask for not(ROI)
-        #if not os.path.exists(mask):
-        dilation_str = '-c a+i -d a-i -e a+j -f a-j -g a+k -h a-k' #dilates ROI volume in three directions
-        masking = afni.Calc()
-        masking.inputs.in_file_a = ROIs
-        masking.inputs.in_file_b = total_mask
-        ### exclude outer radius 1 voxel (dilate roi)
-        masking.inputs.out_file = mask
-        masking.inputs.expr = 'and(b,not(amongst(1, equals(a,'+str(ROI_num)+'),c,d,e,f,g,h)))' #brain without dilated roi
-        masking.inputs.args = '-byte -overwrite '+dilation_str #byte required for 3dsvm
-        maskRun = masking.run()
+    #DATAGRABBER
+    #/home/rschadmin/Data/cpac_benchmark/output/pipeline_benchmark_pipeline/0010042_session_1/functional_mni/_scan_rest_1_rest/_csf_threshold_0.96/_gm_threshold_0.7/_wm_threshold_0.96/_compcor_ncomponents_5_selector_pc10.linear0.wm0.global0.motion0.quadratic0.gm0.compcor1.csf0/_bandpass_freqs_0.01.0.1/bandpassed_demeaned_filtered_wtsimt.nii.gz
+    datagrabber = pe.Node(nio.DataGrabber(infields=['subject_id','session_id','preproc_id'], outfields=['rest_data']), name='datagrabber')
+    datagrabber.inputs.base_directory = '/'
+    datagrabber.inputs.template = '*'
+    datagrabber.inputs.field_template = dict(rest_data=os.path.join(preproc_directory,'%s_%s/functional_mni/_scan_rest_1_rest/*/*/*/*%s/_bandpass_freqs_0.01.0.1/bandpassed_demeaned_filtered_wtsimt.nii.gz'))#from_paths_file
+    datagrabber.inputs.template_args = dict(rest_data=[['subject_id', 'session_id', 'preproc_id']])
+    datagrabber.inputs.sort_filelist = True
+    
+    wf.connect(subject_id_infosource, 'subject_id', datagrabber, 'subject_id')
+    wf.connect(session_id_infosource, 'session_id', datagrabber, 'session_id')
+    wf.connect(preproc_id_infosource, 'preproc_id', datagrabber, 'preproc_id')
+    
+    
 
-        #get timeseries (TSE Average ROI)
-        #3dmaskave -quiet -mask ~/Data/ROIs/craddock_2011_parcellations/rois200.nii -mrange $i $i resampled_bandpassed_demeaned_filtered+tlrc.BRIK > timeseries$i.nii
-        timing = afni.Maskave()
-        timing.inputs.in_file = input_data
-        timing.inputs.out_file = timeseries
-        timing.inputs.quiet = True
-        timing.inputs.mask = ROIs
-        timing.inputs.args = '-overwrite -mrange '+str(ROI_num)+' '+str(ROI_num)
-        timeRun = timing.run()
-
-        #svm training
-        training = afni.SVMTrain()
-        training.inputs.in_file= input_data
-        training.inputs.out_file= w
-        training.inputs.trainlabels= timeseries
-        training.inputs.mask= mask
-        training.inputs.model= model
-        training.inputs.alphas= alphas
-        training.inputs.ttype = 'regression'
-        training.inputs.options = '-c 100 -e 0.01 -overwrite'
-        training.inputs.max_iterations = 100
-        train_res = training.run()
+    #AUTOMASK REST_DATA
+    automasker = pe.Node(afni.Automask(), name = 'automasker')
+    wf.connect(datagrabber, 'rest_data', automasker, 'in_file')
+    
+    
+    
+    #MAKE PREDICTION_MASKS: brain-(ROI + 1voxel perimeter)
+    predmasker = pe.Node(afni.Calc(), name = 'predmasker')
+    predmasker.inputs.in_file_a = ROI_file
+    dilation_str = '-c a+i -d a-i -e a+j -f a-j -g a+k -h a-k' #dilates ROI volume in three directions
+    predmasker.inputs.args = '-byte '+dilation_str #byte required for 3dsvm
+    predmasker.inputs.outputtype = 'NIFTI'
+    
+    def get_expr(ROI_id):
+        expr = 'and(b,not(amongst(1, equals(a,'+str(ROI_id)+'),c,d,e,f,g,h)))'# exclude ROI and it's outer radius by 1voxel
+        return expr
         
-        #convert models to nifti
-        convert = afni.AFNItoNIFTI()
-        convert.inputs.in_file = model+'+orig.BRIK'
-        convert.inputs.out_file = model+'.nii'
-        convert_res = convert.run()
+    wf.connect(automasker, 'out_file', predmasker, 'in_file_b')
+    wf.connect(ROI_id_infosource, ('ROI_id', get_expr), predmasker,'expr')
+    
+    
+    
+    #GET TIMESERIES
+    TSExtractor = pe.Node(afni.Maskave(), name = 'TSExtractor')
+    TSExtractor.inputs.quiet = True
+    TSExtractor.inputs.mask = ROI_file
+    TSExtractor.inputs.outputtype = 'NIFTI'
+    
+    def get_mrange(ROI_id):
+        mrange = '-mrange '+str(ROI_id)+' '+str(ROI_id)
+        return mrange
+        
+    wf.connect(datagrabber, 'rest_data', TSExtractor, 'in_file')
+    wf.connect(ROI_id_infosource, ('ROI_id', get_mrange), TSExtractor, 'args')
+    
+    
+    
+    #TRAIN DATA
+    trainer = pe.Node(afni.SVMTrain(), name = 'Trainer')
+    trainer.inputs.ttype = 'regression'
+    trainer.inputs.options = '-c 100 -e 10 -overwrite'
+    trainer.inputs.max_iterations = 100
+    trainer.inputs.outputtype = 'NIFTI'
+    
+    wf.connect(datagrabber, 'rest_data', trainer, 'in_file')
+    wf.connect(predmasker, 'out_file', trainer, 'mask')
+    wf.connect(TSExtractor, 'out_file', trainer, 'trainlabels')
+    
+    #DATASINK
+    ds = pe.Node(nio.DataSink(), name='datasink')
+    ds.inputs.base_directory = os.path.join(workingdir,'output')
+    
+    wf.connect(trainer, 'out_file', ds, 'vectors')
+    wf.connect(trainer, 'model', ds, 'models')
+    wf.connect(trainer, 'alphas', ds, 'alphas')
+    
+    return wf
+    
+if __name__=='__main__':
+    wf = get_wf()
+    #wf.run(plugin="CondorDAGMan", plugin_args={"template":"universe = vanilla\nnotification = Error\ngetenv = true\nrequest_memory=4000"})
+    #wf.run(plugin="MultiProc", plugin_args={"n_procs":16})
+    wf.run(plugin="Linear", updatehash=True)    
+    
+    #TEST DATA
 
 def test(ROI_data, input_data):
     for ROI_num in np.unique(ROI_data)[1:]:
@@ -134,8 +177,8 @@ def stats(ROI_data):
         TS_file = '/home/rschadmin/Data/svr_test2/timeseries'+str(ROI_num)+'.1D'
         acc2w1.append(accuracy(pred_file, TS_file))
         ##Reproducibility
-        model1 = nb.load('/home/rschadmin/Data/svr_test/model_run'+str(ROI_num)+'.nii').get_data()
-        model2 = nb.load('/home/rschadmin/Data/svr_test2/model_run'+str(ROI_num)+'.nii').get_data()
+        model1 = nb.load('/home/rschadmin/Data/svr_test/w_run'+str(ROI_num)+'.nii').get_data()
+        model2 = nb.load('/home/rschadmin/Data/svr_test2/w_run'+str(ROI_num)+'.nii').get_data()
         rep.append(reproducibility(model1,model2))
     np.save('/home/rschadmin/Data/svr_stats/acc1w2',acc1w2)
     np.save('/home/rschadmin/Data/svr_stats/acc2w1',acc2w1)
