@@ -3,34 +3,27 @@ import nibabel as nb
 import numpy as np
 import os
 from scipy.stats import nanmean, pearsonr
+from shutil import copyfile
+import glob
+import string
 
-dataset = 'svr_test5'
-testset = 'svr_test6'
-filename = "CCB028_20100723_REST.nii.gz"
-#inputs
-input_data = '/home/rschadmin/Data/'+dataset+'/'+filename
-ROIs = '/home/rschadmin/Data/svr_test/rois200_resampled.nii'
-total_mask = '/home/rschadmin/Data/'+dataset+'/automask+orig.BRIK'
-
-#find ROI range
-ROI_data = nb.load(ROIs).get_data()
-def train(input_data, ROI_data, total_mask, ROIs, reverse=False):
+def train(testset, dataset, filename, ROI_data, ROIs, reverse=False):
     if reverse==True:
         data = testset
-        input_data = '/home/rschadmin/Data/'+testset+'/'+filename
-        total_mask = '/home/rschadmin/Data/'+testset+'/automask+orig.BRIK'
+        input_data = glob.glob('/home/rschadmin/Data/CCB/'+testset+'/*REST2.nii.gz')[0]
+        total_mask = glob.glob('/home/rschadmin/Data/CCB/'+testset+'/*automask.nii')[0]
     else:
         data = dataset
-        input_data = '/home/rschadmin/Data/'+dataset+'/'+filename
-        total_mask = '/home/rschadmin/Data/'+dataset+'/automask+orig.BRIK'
+        input_data = '/home/rschadmin/Data/CCB/'+dataset+'/'+filename
+        total_mask = glob.glob('/home/rschadmin/Data/CCB/'+dataset+'/*automask.nii')[0]
     #loop through each ROI
-    for ROI_num in np.unique(ROI_data)[1:]:
+    for ROI_num in np.unique(ROI_data):
         #set outputs
-        timeseries = '/home/rschadmin/Data/'+data+'/timeseries'+str(ROI_num)+'.1D'
-        mask = '/home/rschadmin/Data/'+data+'/mask'+str(ROI_num)+'+orig.BRIK'
-        model = '/home/rschadmin/Data/'+data+'/model_run'+str(ROI_num)
-        w = '/home/rschadmin/Data/'+data+'/w_run'+str(ROI_num)
-        alphas = '/home/rschadmin/Data/'+data+'/alphas_run'+str(ROI_num)
+        timeseries = '/home/rschadmin/Data/CCB/'+data+'/timeseries'+str(ROI_num)+'.1D'
+        mask = '/home/rschadmin/Data/CCB/'+data+'/mask'+str(ROI_num)+'.nii'
+        model = '/home/rschadmin/Data/CCB/'+data+'/model_run'+str(ROI_num)+'.nii'
+        w = '/home/rschadmin/Data/CCB/'+data+'/w_run'+str(ROI_num)+'.nii'
+        alphas = '/home/rschadmin/Data/CCB/'+data+'/alphas_run'+str(ROI_num)
 
         #make mask for not(ROI)
         #if not os.path.exists(mask):
@@ -63,29 +56,31 @@ def train(input_data, ROI_data, total_mask, ROIs, reverse=False):
         training.inputs.model= model
         training.inputs.alphas= alphas
         training.inputs.ttype = 'regression'
-        training.inputs.options = '-c 1e-6 -e 0.05 -overwrite'
-        training.inputs.max_iterations = 1000
+        training.inputs.options = '-c 100 -e 0.1 -overwrite'
+        training.inputs.max_iterations = 10000
         train_res = training.run()
         
-        #convert models to nifti
-        convert = afni.AFNItoNIFTI()
-        convert.inputs.in_file = w+'+orig.BRIK'
-        convert.inputs.out_file = w+'.nii'
-        convert_res = convert.run()
+        #convert w's to nifti
+        #convert = afni.AFNItoNIFTI()
+        #convert.inputs.in_file = w+'+orig.BRIK'
+        #convert.inputs.out_file = w+'.nii'
+        #convert_res = convert.run()
 
-def test(ROI_data, input_data, reverse=False):
+def test(dataset, testset, filename, ROI_data, reverse=False):
     if reverse == True:
         data1 = testset
         data2 = dataset
     else:
         data1 = dataset
         data2 = testset
-    for ROI_num in np.unique(ROI_data)[1:]:
-        model = '/home/rschadmin/Data/'+data1+'/model_run'+str(ROI_num)+'+orig.BRIK'
-        prediction = '/home/rschadmin/Data/svr_prediction/predict_'+data2+'_with_'+data1+'_run'+str(ROI_num)
-        real_model = '/home/rschadmin/Data/'+data2+'/timeseries'+str(ROI_num)+'.1D'
+    for ROI_num in np.unique(ROI_data):
+        model = '/home/rschadmin/Data/CCB/'+data1+'/model_run'+str(ROI_num)+'.nii'
+        if not os.path.isdir('/home/rschadmin/Data/CCB/svr_prediction/'):
+            os.mkdir('/home/rschadmin/Data/CCB/svr_prediction/')
+        prediction = '/home/rschadmin/Data/CCB/svr_prediction/predict_'+data2+'_with_'+data1+'_run'+str(ROI_num)
+        real_model = '/home/rschadmin/Data/CCB/'+data2+'/timeseries'+str(ROI_num)+'.1D'
         testing = afni.SVMTest()
-        testing.inputs.in_file= '/home/rschadmin/Data/'+data2+'/'+filename
+        testing.inputs.in_file= glob.glob('/home/rschadmin/Data/CCB/'+data2+'/*.nii.gz')[0]
         testing.inputs.model= model
         testing.inputs.testlabels= real_model
         testing.inputs.out_file= prediction
@@ -126,37 +121,83 @@ def accuracy(prediction_file, timeseries_file):
         prediction = np.fromfile(f, sep=" ")
     with open(timeseries_file) as f:
         timeseries = np.fromfile(f, sep=" ")
-    accuracy = conc(prediction, timeseries, pearsonr(prediction,timeseries)[0])
-    print "r=",pearsonr(prediction,timeseries)[0]
+    r = pearsonr(prediction,timeseries)[0]
+    accuracy = conc(prediction, timeseries, r)
+    print "r=",r
     print accuracy
-    return accuracy
+    return accuracy, r
     
 def reproducibility(w1, w2):
     rho = rho3D(w1, w2)
     reproducibility = conc(w1, w2, rho) #nanmean to get one value
     print "r=",rho
     print reproducibility
-    return reproducibility
+    return reproducibility, rho
     
-def stats(ROI_data):
+def stats(testset, dataset, ROI_data):
     acc1w2 = []
     acc2w1 = []
     rep = []
-    for ROI_num in np.unique(ROI_data)[1:]:
+    for ROI_num in np.unique(ROI_data):
         print str(ROI_num)+' of '+str(np.unique(ROI_data).max())
         ##Accuracy 1<-2
-        pred_file = '/home/rschadmin/Data/svr_prediction/predict_'+testset+'_with_'+dataset+'_run'+str(ROI_num)+'.1D'
-        TS_file = '/home/rschadmin/Data/'+testset+'/timeseries'+str(ROI_num)+'.1D'
+        pred_file = '/home/rschadmin/Data/CCB/svr_prediction/predict_'+testset+'_with_'+dataset+'_run'+str(ROI_num)+'.1D'
+        TS_file = '/home/rschadmin/Data/CCB/'+testset+'/timeseries'+str(ROI_num)+'.1D'
         acc1w2.append(accuracy(pred_file, TS_file))
         ##Accuracy 1->2
-        pred_file = '/home/rschadmin/Data/svr_prediction/predict_'+dataset+'_with_'+testset+'_run'+str(ROI_num)+'.1D'
-        TS_file = '/home/rschadmin/Data/'+dataset+'/timeseries'+str(ROI_num)+'.1D'
+        pred_file = '/home/rschadmin/Data/CCB/svr_prediction/predict_'+dataset+'_with_'+testset+'_run'+str(ROI_num)+'.1D'
+        TS_file = '/home/rschadmin/Data/CCB/'+dataset+'/timeseries'+str(ROI_num)+'.1D'
         acc2w1.append(accuracy(pred_file, TS_file))
         ##Reproducibility
-        w1 = nb.load('/home/rschadmin/Data/'+dataset+'/w_run'+str(ROI_num)+'.nii').get_data()
-        w2 = nb.load('/home/rschadmin/Data/'+testset+'/w_run'+str(ROI_num)+'.nii').get_data()
+        w1 = nb.load('/home/rschadmin/Data/CCB/'+dataset+'/w_run'+str(ROI_num)+'.nii').get_data()
+        w2 = nb.load('/home/rschadmin/Data/CCB/'+testset+'/w_run'+str(ROI_num)+'.nii').get_data()
         rep.append(reproducibility(w1,w2))
-    np.save('/home/rschadmin/Data/svr_stats/acc_'+testset+'_with_'+dataset,acc1w2)
-    np.save('/home/rschadmin/Data/svr_stats/acc_'+dataset+'_with_'+testset,acc2w1)
-    np.save('/home/rschadmin/Data/svr_test/rep',rep)
+    if not os.path.isdir('/home/rschadmin/Data/CCB/svr_stats'):
+        os.mkdir('/home/rschadmin/Data/CCB/svr_stats')
+        
+    paths = ['/home/rschadmin/Data/CCB/svr_stats/acc_'+testset+'_with_'+dataset+'.npy',
+             '/home/rschadmin/Data/CCB/svr_stats/acc_'+dataset+'_with_'+testset+'.npy',
+             '/home/rschadmin/Data/CCB/svr_stats/rep_'+dataset+'+2.npy']
+    for i, x in enumerate([acc1w2, acc2w1, rep]):
+        if ROI_num==1:
+            after = x
+        else:
+            if os.path.exists(paths[i]):
+                before = np.load(paths[i])
+                after = np.vstack((before,x))
+            else: print "NO PREVIOUS FILE"
+        np.save(paths[i], after)      ### SAVE: appending new ROI to previous set if not a new run
+    
     return acc1w2, acc2w1, rep
+    
+if __name__ == "__main__":
+    datadir = '/home/rschadmin/Data/CCB/'
+    sublist = os.listdir(datadir)
+    ROIs = '/home/rschadmin/Data/ROIs/craddock_2011_parcellations/rois200_resampled.nii'
+    #find ROI range
+    ROI_all = nb.load(ROIs).get_data()
+    for ROI in np.unique(ROI_all)[1:]:
+        for f in os.listdir(datadir)[2:]:
+            if f.endswith('1.nii.gz'): #rest scan number is 1
+                subject_name = f.split('_')[1]
+                dataset = subject_name+'Scan1'
+                testset = subject_name+'Scan2'
+                datasetdir = os.path.join('/home/rschadmin/Data/CCB',dataset)
+                testsetdir = os.path.join('/home/rschadmin/Data/CCB',testset)
+                f_match = glob.glob(datadir+'*'+subject_name+'*_REST2.nii.gz')[0]
+                
+                if not os.path.isdir(datasetdir):
+                    os.mkdir(datasetdir)
+                    copyfile(os.path.join(datadir,f), os.path.join(datasetdir,f))
+                    copyfile(os.path.join(datadir,f+"+automask.nii"), os.path.join(datasetdir,f+"+automask.nii"))
+                if not os.path.isdir(testsetdir):
+                    os.mkdir(testsetdir)
+                    copyfile(f_match, os.path.join(testsetdir,os.path.basename(f_match)))
+                    copyfile(f_match+"+automask.nii", os.path.join(testsetdir,os.path.basename(f_match)+"+automask.nii"))
+                train(testset, dataset, f, ROI, ROIs)
+                train(testset, dataset, f, ROI, ROIs, reverse=True)
+                test(testset, dataset, f, ROI)
+                test(testset, dataset, f,ROI, reverse=True)
+                stats(testset, dataset, ROI)
+            else:
+                continue
