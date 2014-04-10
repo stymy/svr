@@ -179,9 +179,9 @@ def stats(testset, dataset, ROI_data):
     return acc1w2, acc2w1, rep
     
 if __name__ == "__main__":
-    datadir = '/home2/data/PreProc/CCB'
+    datadir = '/home2/data/PreProc/CCB/'
     flist = [f for f in os.listdir(datadir) if f.endswith('1.nii.gz')]
-    f = flist[sys.argv[1]
+    f = flist[int(sys.argv[1])-1]
     ROIs = '/home2/data/SEEDS/Craddock_2011_parcellations/craddock200_resampled.nii'
     #find ROI range
     ROI_all = nb.load(ROIs).get_data()
@@ -191,7 +191,7 @@ if __name__ == "__main__":
         testset = subject_name+'Scan2'
         datasetdir = os.path.join('/home2/data/PreProc/CCB',dataset)
         testsetdir = os.path.join('/home2/data/PreProc/CCB',testset)
-        f_match = glob.glob(datadir+'*'+subject_name+'*_REST2.nii.gz')[0]
+        f_match = glob.glob(os.path.join(datadir+'*'+subject_name+'*_REST2.nii.gz'))[0]
         
         if not os.path.isdir(datasetdir):
             os.mkdir(datasetdir)
