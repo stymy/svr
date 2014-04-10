@@ -181,7 +181,7 @@ def stats(testset, dataset, ROI_data):
 if __name__ == "__main__":
     datadir = '/home2/data/PreProc/CCB/'
     flist = [f for f in os.listdir(datadir) if f.endswith('1.nii.gz')]
-    f = flist[int(sys.argv[1])-1]
+    f = flist[int(sys.argv[1])-1] #'-1' because sge task ids start with 1 indexing
     ROIs = '/home2/data/SEEDS/Craddock_2011_parcellations/craddock200_resampled.nii'
     #find ROI range
     ROI_all = nb.load(ROIs).get_data()
