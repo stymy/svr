@@ -186,7 +186,7 @@ if __name__ == "__main__":
     #find ROI range
     ROI_all = nb.load(ROIs).get_data()
     for ROI in np.unique(ROI_all)[1:]:
-        subject_name = f.split('_')[1]
+        subject_name = f.split('_')[0]
         dataset = subject_name+'Scan1'
         testset = subject_name+'Scan2'
         datasetdir = os.path.join('/home2/data/PreProc/CCB',dataset)
