@@ -14,7 +14,7 @@ def train(testset, dataset, filename, ROI_data, ROIs, reverse=False):
         total_mask = glob.glob('/home/rschadmin/Data/CCB/'+testset+'/*automask.nii')[0]
     else:
         data = dataset
-        input_data = '/home/rschadmin/Data/CCB/'+dataset+'/'+filename
+        input_data = glob.glob('/home/rschadmin/Data/CCB/'+dataset+'/*REST1.nii.gz')[0]
         total_mask = glob.glob('/home/rschadmin/Data/CCB/'+dataset+'/*automask.nii')[0]
     #loop through each ROI
     for ROI_num in np.unique(ROI_data):
@@ -27,14 +27,19 @@ def train(testset, dataset, filename, ROI_data, ROIs, reverse=False):
 
         #make mask for not(ROI)
         #if not os.path.exists(mask):
-        dilation_str = '-c a+i -d a-i -e a+j -f a-j -g a+k -h a-k' #dilates ROI volume in three directions
         masking = afni.Calc()
         masking.inputs.in_file_a = ROIs
         masking.inputs.in_file_b = total_mask
         ### exclude outer radius 1 voxel (dilate roi)
         masking.inputs.out_file = mask
-        masking.inputs.expr = 'and(b,not(amongst(1, equals(a,'+str(ROI_num)+'),c,d,e,f,g,h)))' #brain without dilated roi
-        masking.inputs.args = '-byte -overwrite '+dilation_str #byte required for 3dsvm
+        masking.inputs.expr = 'and(b,not(amongst(1, equals(a,'+str(ROI_num)+'),\
+                               equals(a,'+str(ROI_num)+')+i,\
+                               equals(a,'+str(ROI_num)+')-i,\
+                               equals(a,'+str(ROI_num)+')+j,\
+                               equals(a,'+str(ROI_num)+')-j,\
+                               equals(a,'+str(ROI_num)+')+k,\
+                               equals(a,'+str(ROI_num)+')-k)))' #dilates ROI volume in three directions
+        masking.inputs.args = '-byte -overwrite ' #byte required for 3dsvm
         maskRun = masking.run()
 
         #get timeseries (TSE Average ROI)
@@ -173,11 +178,11 @@ def stats(testset, dataset, ROI_data):
 if __name__ == "__main__":
     datadir = '/home/rschadmin/Data/CCB/'
     sublist = os.listdir(datadir)
-    ROIs = '/home/rschadmin/Data/ROIs/craddock_2011_parcellations/rois200_resampled.nii'
+    ROIs = '/home/rschadmin/Data/ROIs/craddock_2011_parcellations/craddock200_resampled.nii'
     #find ROI range
     ROI_all = nb.load(ROIs).get_data()
     for ROI in np.unique(ROI_all)[1:]:
-        for f in os.listdir(datadir)[2:]:
+        for f in os.listdir(datadir):
             if f.endswith('1.nii.gz'): #rest scan number is 1
                 subject_name = f.split('_')[1]
                 dataset = subject_name+'Scan1'
