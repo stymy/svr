@@ -6,6 +6,7 @@ from scipy.stats import nanmean, pearsonr
 from shutil import copyfile
 import glob
 import string
+import sys
 
 def train(testset, dataset, filename, ROI_data, ROIs, reverse=False):
     if reverse==True:
@@ -178,33 +179,30 @@ def stats(testset, dataset, ROI_data):
     return acc1w2, acc2w1, rep
     
 if __name__ == "__main__":
-    datadir = '/home2/data/PreProc/CCB/'
-    sublist = os.listdir(datadir)
+    datadir = '/home2/data/PreProc/CCB'
+    flist = [f for f in os.listdir(datadir) if f.endswith('1.nii.gz')]
+    f = flist[sys.argv[1]
     ROIs = '/home2/data/SEEDS/Craddock_2011_parcellations/craddock200_resampled.nii'
     #find ROI range
     ROI_all = nb.load(ROIs).get_data()
     for ROI in np.unique(ROI_all)[1:]:
-        for f in os.listdir(datadir):
-            if f.endswith('1.nii.gz'): #rest scan number is 1
-                subject_name = f.split('_')[1]
-                dataset = subject_name+'Scan1'
-                testset = subject_name+'Scan2'
-                datasetdir = os.path.join('/home2/data/PreProc/CCB',dataset)
-                testsetdir = os.path.join('/home2/data/PreProc/CCB',testset)
-                f_match = glob.glob(datadir+'*'+subject_name+'*_REST2.nii.gz')[0]
-                
-                if not os.path.isdir(datasetdir):
-                    os.mkdir(datasetdir)
-                    copyfile(os.path.join(datadir,f), os.path.join(datasetdir,f))
-                    copyfile(os.path.join(datadir,f+"+automask.nii"), os.path.join(datasetdir,f+"+automask.nii"))
-                if not os.path.isdir(testsetdir):
-                    os.mkdir(testsetdir)
-                    copyfile(f_match, os.path.join(testsetdir,os.path.basename(f_match)))
-                    copyfile(f_match+"+automask.nii", os.path.join(testsetdir,os.path.basename(f_match)+"+automask.nii"))
-                train(testset, dataset, f, ROI, ROIs)
-                train(testset, dataset, f, ROI, ROIs, reverse=True)
-                test(testset, dataset, f, ROI)
-                test(testset, dataset, f,ROI, reverse=True)
-                stats(testset, dataset, ROI)
-            else:
-                continue
+        subject_name = f.split('_')[1]
+        dataset = subject_name+'Scan1'
+        testset = subject_name+'Scan2'
+        datasetdir = os.path.join('/home2/data/PreProc/CCB',dataset)
+        testsetdir = os.path.join('/home2/data/PreProc/CCB',testset)
+        f_match = glob.glob(datadir+'*'+subject_name+'*_REST2.nii.gz')[0]
+        
+        if not os.path.isdir(datasetdir):
+            os.mkdir(datasetdir)
+            copyfile(os.path.join(datadir,f), os.path.join(datasetdir,f))
+            copyfile(os.path.join(datadir,f+"+automask.nii"), os.path.join(datasetdir,f+"+automask.nii"))
+        if not os.path.isdir(testsetdir):
+            os.mkdir(testsetdir)
+            copyfile(f_match, os.path.join(testsetdir,os.path.basename(f_match)))
+            copyfile(f_match+"+automask.nii", os.path.join(testsetdir,os.path.basename(f_match)+"+automask.nii"))
+        train(testset, dataset, f, ROI, ROIs)
+        train(testset, dataset, f, ROI, ROIs, reverse=True)
+        test(testset, dataset, f, ROI)
+        test(testset, dataset, f,ROI, reverse=True)
+        stats(testset, dataset, ROI)
