@@ -146,6 +146,7 @@ def stats(testset, dataset, ROI_data):
     for ROI_num in np.unique(ROI_data):
         print str(ROI_num)+' of '+str(np.unique(ROI_data).max())
         ##Accuracy 1<-2
+
         pred_file = '/home2/data/PreProc/CCB/svr_prediction/predict_'+testset+'_with_'+dataset+'_run'+str(ROI_num)+'.1D'
         TS_file = '/home2/data/PreProc/CCB/'+testset+'/timeseries'+str(ROI_num)+'.1D'
         acc1w2.append(accuracy(pred_file, TS_file))
@@ -163,6 +164,7 @@ def stats(testset, dataset, ROI_data):
     paths = ['/home2/data/PreProc/CCB/svr_stats/acc_'+testset+'_with_'+dataset+'.npy',
              '/home2/data/PreProc/CCB/svr_stats/acc_'+dataset+'_with_'+testset+'.npy',
              '/home2/data/PreProc/CCB/svr_stats/rep_'+dataset+'+2.npy']
+
     for i, x in enumerate([acc1w2, acc2w1, rep]):
         if ROI_num==1:
             after = x
