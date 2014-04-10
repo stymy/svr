@@ -189,8 +189,8 @@ if __name__ == "__main__":
                 subject_name = f.split('_')[1]
                 dataset = subject_name+'Scan1'
                 testset = subject_name+'Scan2'
-                datasetdir = os.path.join('/home2/data/CCB',dataset)
-                testsetdir = os.path.join('/home2/data/CCB',testset)
+                datasetdir = os.path.join('/home2/data/PreProc/CCB',dataset)
+                testsetdir = os.path.join('/home2/data/PreProc/CCB',testset)
                 f_match = glob.glob(datadir+'*'+subject_name+'*_REST2.nii.gz')[0]
                 
                 if not os.path.isdir(datasetdir):
