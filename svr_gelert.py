@@ -12,36 +12,17 @@ def train(testset, dataset, filename, ROI_data, ROIs, reverse=False):
     if reverse==True:
         data = testset
         input_data = glob.glob('/home2/data/PreProc/CCB/'+testset+'/*REST2.nii.gz')[0]
-        total_mask = glob.glob('/home2/data/PreProc/CCB/'+testset+'/*automask.nii')[0]
     else:
         data = dataset
         input_data = glob.glob('/home2/data/PreProc/CCB/'+dataset+'/*REST1.nii.gz')[0]
-        total_mask = glob.glob('/home2/data/PreProc/CCB/'+dataset+'/*automask.nii')[0]
     #loop through each ROI
     for ROI_num in np.unique(ROI_data):
         #set outputs
         timeseries = '/home2/data/PreProc/CCB/'+data+'/timeseries'+str(ROI_num)+'.1D'
-        mask = '/home2/data/PreProc/CCB/'+data+'/mask'+str(ROI_num)+'.nii'
+        mask = '/home2/data/SEEDS/Craddock_2011_parcellations/Craddock_200_rMasks/mask_roi'+str(ROI_num)+'.nii'
         model = '/home2/data/PreProc/CCB/'+data+'/model_run'+str(ROI_num)+'.nii'
         w = '/home2/data/PreProc/CCB/'+data+'/w_run'+str(ROI_num)+'.nii'
         alphas = '/home2/data/PreProc/CCB/'+data+'/alphas_run'+str(ROI_num)
-
-        #make mask for not(ROI)
-        #if not os.path.exists(mask):
-        masking = afni.Calc()
-        masking.inputs.in_file_a = ROIs
-        masking.inputs.in_file_b = total_mask
-        ### exclude outer radius 1 voxel (dilate roi)
-        masking.inputs.out_file = mask
-        masking.inputs.expr = 'and(b,not(amongst(1, equals(a,'+str(ROI_num)+'),\
-                               equals(a,'+str(ROI_num)+')+i,\
-                               equals(a,'+str(ROI_num)+')-i,\
-                               equals(a,'+str(ROI_num)+')+j,\
-                               equals(a,'+str(ROI_num)+')-j,\
-                               equals(a,'+str(ROI_num)+')+k,\
-                               equals(a,'+str(ROI_num)+')-k)))' #dilates ROI volume in three directions
-        masking.inputs.args = '-byte -overwrite ' #byte required for 3dsvm
-        maskRun = masking.run()
 
         #get timeseries (TSE Average ROI)
         #3dmaskave -quiet -mask ~/Data/ROIs/craddock_2011_parcellations/rois200.nii -mrange $i $i resampled_bandpassed_demeaned_filtered+tlrc.BRIK > timeseries$i.nii
