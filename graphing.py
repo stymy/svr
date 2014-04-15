@@ -30,11 +30,11 @@ sublist = \
 
 datalist = []
 for subject in sublist:
-    for ROI in range(1,5):
+    for ROI in range(1,13):
         d = dict()
         d['subid'] = 'sub_'+subject
         index = ROI-1
-        d['ROI'] = 'r_'+str(ROI)
+        d['ROI'] = 'r%02i'%ROI
         one = np.load('/home/rschadmin/Data/CCB/svr_stats/acc_%sScan1_with_%sScan2.npy'%(subject,subject))
         d['accuracy_1 pearson'] = one[index,1]
         d['accuracy_1 concordance'] = one[index,0]
