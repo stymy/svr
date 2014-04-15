@@ -1,3 +1,5 @@
+#!/home2/aimiwat/ENV/bin/python
+
 import nipype.interfaces.afni as afni
 import nibabel as nb
 import numpy as np
@@ -19,7 +21,7 @@ def train(testset, dataset, filename, ROI_data, ROIs, reverse=False):
     for ROI_num in np.unique(ROI_data):
         #set outputs
         timeseries = '/home2/data/PreProc/CCB/'+data+'/timeseries'+str(ROI_num)+'.1D'
-        mask = '/home2/data/SEEDS/Craddock_2011_parcellations/Craddock_200_rMasks/mask_roi'+str(ROI_num)+'.nii'
+        mask = '/home2/data/SEEDS/Craddock_2011_parcellations/craddock200_rMasks/mask_roi'+str(ROI_num)+'.nii'
         model = '/home2/data/PreProc/CCB/'+data+'/model_run'+str(ROI_num)+'.nii'
         w = '/home2/data/PreProc/CCB/'+data+'/w_run'+str(ROI_num)+'.nii'
         alphas = '/home2/data/PreProc/CCB/'+data+'/alphas_run'+str(ROI_num)
