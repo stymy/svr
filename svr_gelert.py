@@ -46,7 +46,7 @@ def train(testset, dataset, filename, ROI_data, ROIs, reverse=False):
         training.inputs.alphas= alphas
         training.inputs.ttype = 'regression'
         training.inputs.options = '-c 100 -e 0.1 -overwrite'
-        training.inputs.max_iterations = 10000
+        training.inputs.max_iterations = 1000
         train_res = training.run()
         
         #convert w's to nifti
